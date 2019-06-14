@@ -9,6 +9,11 @@ import scipy.misc as smp
 from torch import nn
 from torchvision import transforms
 
+###
+# Author Clay O'Neil
+# Paper https://arxiv.org/abs/1511.06434
+###
+
 batch_size = 32
 train_steps = 1000
 latent_space = 100
