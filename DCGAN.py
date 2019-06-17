@@ -8,6 +8,9 @@ import scipy.misc as smp
 
 from torch import nn
 from torchvision import transforms
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
 ###
 # Author Clay O'Neil
@@ -23,16 +26,16 @@ class G(torch.nn.Module):
   def __init__(self):
     super(G, self).__init__()
     self.l1 = nn.Sequential(
-                        nn.ConvTranspose2d(in_channels=latent_space, out_channels=512, kernel_size=5, stride=1, bias=False), 
+                        nn.ConvTranspose2d(in_channels=latent_space, out_channels=1024, kernel_size=5, stride=1, bias=False), 
+                        nn.ReLU(inplace=True), 
+                        torch.nn.BatchNorm2d(1024), 
+                        nn.ConvTranspose2d(in_channels=1024, out_channels=512, kernel_size=5, stride=2, bias=False),
                         nn.ReLU(inplace=True), 
                         torch.nn.BatchNorm2d(512), 
                         nn.ConvTranspose2d(in_channels=512, out_channels=256, kernel_size=5, stride=2, bias=False),
                         nn.ReLU(inplace=True), 
-                        torch.nn.BatchNorm2d(256), 
-                        nn.ConvTranspose2d(in_channels=256, out_channels=128, kernel_size=5, stride=2, bias=False),
-                        nn.ReLU(inplace=True), 
-                        torch.nn.BatchNorm2d(128),
-                        nn.ConvTranspose2d(in_channels=128, out_channels=3, kernel_size=4, stride=1, bias=False),  
+                        torch.nn.BatchNorm2d(256),
+                        nn.ConvTranspose2d(in_channels=256, out_channels=3, kernel_size=4, stride=1, bias=False),  
                         nn.Tanh()
                         ) 
     self.l2 = lambda x : nn.functional.interpolate(input=x, size=(32, 32),  mode='nearest')
@@ -90,6 +93,8 @@ generator.apply(init_weights)
 descriminator.apply(init_weights)
 
 criterion = nn.BCELoss()
+g_losses = []
+d_losses = []
 
 g_optimizer = torch.optim.Adam(generator.parameters(), lr=2e-4, betas=(0.5, 0.999))
 d_optimizer = torch.optim.Adam(descriminator.parameters(), lr=2e-4, betas=(0.5, 0.999))
@@ -98,6 +103,7 @@ data = torchvision.datasets.CIFAR10('./data', train=True, transform=transforms.C
                             transforms.ToTensor(),
                             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                         ]), download=False)
+
 loader = torch.utils.data.DataLoader(
                   dataset=data,
                   batch_size=batch_size,
@@ -127,6 +133,7 @@ for epoch in range(epochs):
     de.backward()
 
     d_optimizer.step()
+    d_losses.append(de.item())
   
     # Update generator to maximize log(D(G(z)))
     g_optimizer.zero_grad()
@@ -136,6 +143,7 @@ for epoch in range(epochs):
 
     ge.backward()
     g_optimizer.step()
+    g_losses.append(ge.item())
 
     # Logging
     print('epoch', epoch + 1, 'batch', t + 1, 'generator loss', ge.item())
@@ -147,3 +155,23 @@ for epoch in range(epochs):
 
     if t % 25 == 0:
       save_photo(fake_photos.detach()[0].view(3,32,32), str(epoch) + '_' + str(t))
+   
+  t = np.linspace(0, len(loader) * (epoch + 1) , len(d_losses))
+  y = np.cos(np.pi * (t / len(d_losses)))
+
+  plt.scatter(t, d_losses, c=y, s=1)
+
+  plt.xlabel('batches', fontsize=14, color='red')
+  plt.ylabel('loss', fontsize=14, color='red')
+  plt.savefig('d_loss' + str(epoch))
+
+  plt.clf()
+
+  t = np.linspace(0, len(loader) * (epoch + 1) , len(g_losses))
+  y = np.cos(np.pi * (t / len(g_losses)))
+
+  plt.scatter(t, g_losses, c=y, s=1)
+
+  plt.xlabel('batches', fontsize=14, color='red')
+  plt.ylabel('loss', fontsize=14, color='red')
+  plt.savefig('g_loss' + str(epoch))
